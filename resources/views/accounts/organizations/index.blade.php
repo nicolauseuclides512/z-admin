@@ -1,0 +1,231 @@
+@extends('layouts.app')
+
+@section('title', 'Organizations')
+
+@section('page_title', 'Organizations')
+
+@section('page_breadcrumb')
+@parent
+<li class="active">Organizations</li>
+@endsection
+
+@section('content')
+<div class="row" id="organization_id" v-cloak>
+    <div class="col-md-12">
+        <!--   Kitchen Sink -->
+        <div class="card">
+            <div class="card-action">
+                <input class="right"
+                       type="text"
+                       v-on:input="search"
+                       v-model="meta.q"
+                       placeholder="Search"
+                       style="width: 30%"/>
+            </div>
+            <div class="clearfix"></div>
+            <div class="card-content">
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered table-hover">
+                        <thead>
+                          <tr>
+                              <th>No</th>
+                              <th>ID</th>
+                              <th>Organization Name</th>
+                              <th>Created</th>
+                              <th>Email</th>
+                              <th>Phone</th>
+                              <th>Address</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                        <template v-for="(organization,i) in organizations">
+                            <tr data-toggle="collapse"
+                                v-bind:data-target="'#accordion-'+i"
+                                class="clickable"
+                                style="cursor:pointer;">
+                                <td>@{{ (i + 1) + ((paginate.current_page -1) * meta.per_page) }}</td>
+                                <td>@{{ organization.id }}</td>
+                                <td><a href="admin/accounts/organizations/@{{ organization.id }}" >@{{ organization.name }}</a></td>
+                                <td>@{{ organization.primary_contact.verified_at | datetime }}</td>
+                                <td>@{{ organization.primary_contact.email }}</td>
+                                <td>@{{ organization.phone }}</td>
+                                <td>
+                                  <span v-if='organization.region_id != null'>
+                                    @{{ organization.region_id }}
+                                    <span v-if='organization.region_id != null'>
+                                      ,
+                                    </span>
+                                  </span>
+                                  <span v-if='organization.district_id != null'>
+                                    @{{ organization.district_id }}
+                                    <span v-if='organization.province_id !=null'>
+                                      ,
+                                    </span>
+                                  </span>
+                                  <span v-if='organization.province_id != null'>
+                                    @{{ organization.province_id }}
+                                  </span>
+                                </td>
+                            </tr>
+                        </template>
+                        </tbody>
+                    </table>
+                    <div class="clearfix"></div>
+                    <p class="pull-left">
+                        Showing @{{ (paginate.current_page - 1) * paginate.per_page + 1 }} to @{{ paginate.current_page * paginate.per_page - (paginate.per_page - paginate.count) }} of @{{ paginate.total }}
+                    </p>
+                    <ul class="pagination pagination-sm pull-right">
+                        <li v-bind:class="meta.page > 1 ?'':'disabled'">
+                            <a href="javascript:;"
+                               v-on:click="setPage(paginate.current_page - 1)">
+                                <span class="glyphicon glyphicon-chevron-left"></span>
+                            </a>
+                        </li>
+                        <li v-bind:class="paginate.has_more_pages ?'':'disabled'">
+                            <a href="javascript:;"
+                               v-on:click="setPage(paginate.current_page + 1)">
+                                <span class="glyphicon glyphicon-chevron-right"></span>
+                            </a>
+                        </li>
+                    </ul>
+
+                </div>
+            </div>
+        </div>
+        <!-- End  Kitchen Sink -->
+    </div>
+</div>
+
+@endsection
+
+@push('css')
+<link rel="stylesheet" href="https://cdn.datatables.net/1.10.18/css/dataTables.bootstrap.min.css"/>
+<style>
+    .dataTables_info {
+        float: left;
+        margin-right: 10px;
+        text-align: center;
+        line-height: 10px;
+    }
+
+    .grid-striped .row:nth-of-type(odd) {
+        background-color: rgba(0, 0, 0, .05);
+    }
+
+    .border {
+        border: 1px solid #d8d0d0;
+    }
+
+    @media (min-width: 1200px)
+        .container {
+            width: 0 !important;
+        }
+</style>
+@endpush
+
+@push('js')
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.18.0/axios.min.js"></script>
+
+<script type="text/javascript">
+    let me = {};
+    me.url = '/admin/accounts/organizations';
+    me.csrf = $('meta[name=csrf-token]').attr("content");
+
+    Vue.filter('capitalize', function (value) {
+        if (!value) return ''
+        value = value.toString()
+        return value.charAt(0).toUpperCase() + value.slice(1)
+    });
+
+    Vue.filter('datetime', function (value) {
+        if (!value) return ''
+        timestamp = new Date(value * 1000)
+        tanggal = timestamp.getDate()
+        tanggal_string = tanggal.toString()
+        tahun = timestamp.getFullYear()
+        bulan_bulan = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
+        bulan = bulan_bulan[timestamp.getMonth()]
+        final = tanggal_string.concat(" ", bulan, " ", tahun)
+        return final
+    });
+
+    new Vue({
+        el: '#organization_id',
+        data() {
+            return {
+                organizations: null,
+                meta: {
+                    q: '',
+                    page: 1,
+                    per_page: 15,
+                    filter: 'all',
+                    sort: 'created_at.desc',
+                    total: 0,
+
+                },
+                paginate: {
+                    count: '',
+                    current_page: 1,
+                    current_page_url: "",
+                    has_more_pages: true,
+                    last_page: 0,
+                    next_page_url: "",
+                    per_page: 0,
+                    prev_page_url: "",
+                    total: 0,
+                }
+            }
+        },
+        mounted() {
+            this.fetch();
+        },
+        methods: {
+            fetch: function () {
+              r = encodeURIComponent(this.meta.q);
+                axios
+                    .get(me.url
+                        + "?_token="
+                        + me.csrf
+                        + `&q=${r}&page=${this.meta.page}&per_page=${this.meta.per_page}&filter=${this.meta.filter}&sort=${this.meta.sort}`)
+                    .then(response => {
+                        if (response.status === 200 && response.data.code === 200) {
+                            console.info(response.data)
+                            this.organizations = response.data.data;
+                            this.paginate = response.data.paginate;
+                        }
+                    })
+            },
+            setPage: function (page) {
+                this.meta.page = page;
+                this.fetch();
+            },
+            search: function () {
+                if (this.meta.q.length > 2 || this.meta.q.length < 1)
+                    this.fetch();
+            },
+            remove: function (id) {
+                swal("Do you want to remove this data?", {
+                    buttons: {
+                        no: 'No',
+                        yes: 'Yes',
+                    },
+                }).then((value) => {
+                    switch (value) {
+                        case "yes":
+                            axios
+                                .delete(me.url + "/" + id + '?_token=' + me.csrf)
+                                .then(response => {
+                                    if (response.status === 200 && response.data.code === 200)
+                                        this.fetch();
+                                });
+                            break;
+                        default:
+                            console.log("Got away safely!");
+                    }
+                });
+            }
+        }
+    });
+</script>
+@endpush
